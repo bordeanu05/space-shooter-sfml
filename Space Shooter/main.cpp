@@ -3,18 +3,18 @@
 #include <SFML/Graphics.hpp>
 #include <bits/stdc++.h>
 
-using namespace std;
-
 #define WIDTH  1000
 #define HEIGHT 800
 
 #define PI 3.14159
 
+sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "", sf::Style::Close);
+
 class Animation
 {
 public:
     sf::Sprite sprite;
-    vector<sf::IntRect> frames;
+    std::vector<sf::IntRect> frames;
     float frame;
 
     void Init(sf::Texture &t, int n)
@@ -56,17 +56,29 @@ public:
     float speed;
     bool canBeShot = true;
 
-    void SetRotationAndPos(sf::RenderWindow &window, sf::Vector2f startPos)
+    void SetRotationAndPos( sf::Vector2f startPos)
     {
         canBeShot = false;
         dx = sf::Mouse::getPosition(window).x - startPos.x;
         dy = sf::Mouse::getPosition(window).y - startPos.y;
 
-        float tan = dy/dx;
         float rotation = atan2(dy, dx) * 180.0f/PI + 90;
 
         sprite.setRotation(rotation);
         sprite.setPosition(startPos);
+    }
+    void AddToPool()
+    {
+        canBeShot = true;
+        sprite.setPosition(WIDTH+10, HEIGHT+10);
+    }
+    void Init(float Speed, sf::Texture &texture)
+    {
+        AddToPool();
+        sprite.setTexture(texture);
+        sprite.setScale(0.02f, 0.02f);
+        sprite.setOrigin(100, 300);
+        speed = Speed;
     }
     void Move()
     {
@@ -78,8 +90,7 @@ public:
     void CheckPos()
     {
         if(sprite.getPosition().x < -10 || sprite.getPosition().x > WIDTH+10 || sprite.getPosition().y < -10 || sprite.getPosition().y > HEIGHT+10){
-            canBeShot = true;
-            sprite.setPosition(WIDTH+10, HEIGHT+10);
+            AddToPool();
         }
     }
 };
@@ -91,30 +102,35 @@ private:
 public:
     sf::Sprite sprite;
     float speed;
+    bool dead = false;
+    bool frozen = true;
 
     void Init(sf::Texture &t, float Speed)
     {
         sprite.setTexture(t);
         sprite.setOrigin(t.getSize().x/2, t.getSize().y/2);
+        sprite.setScale(0.09f, 0.09f);
+        sprite.setPosition(WIDTH/2, HEIGHT/2);
+
         speed = Speed;
     }
 
-    void Rotate(sf::RenderWindow &window)
+    void Rotate()
     {
         float dx = sf::Mouse::getPosition(window).x - sprite.getPosition().x;
         float dy = sf::Mouse::getPosition(window).y - sprite.getPosition().y;
 
-        float tan = dy/dx;
         float rotation = atan2(dy, dx) * 180.0f/PI+90;
 
         sprite.setRotation(rotation);
     }
 
-    void Move(sf::RenderWindow &window, float smoothness)
+    void Move(float smoothness)
     {
         if(sf::Keyboard::isKeyPressed(sf::Keyboard::W)){
             dx = sf::Mouse::getPosition(window).x - sprite.getPosition().x;
             dy = sf::Mouse::getPosition(window).y - sprite.getPosition().y;
+
             normalize = sqrt((dx*dx)+(dy*dy));
             auxSpeed = speed;
 
@@ -127,6 +143,16 @@ public:
             }
         }
     }
+    void CheckBoundaries()
+    {
+        int posX = sprite.getPosition().x;
+        int posY = sprite.getPosition().y;
+
+        if(posX>WIDTH+20) sprite.setPosition(-20, posY);
+        if(posX<-20) sprite.setPosition(WIDTH+20, posY);
+        if(posY>HEIGHT+20) sprite.setPosition(posX, -20);
+        if(posY<-20) sprite.setPosition(posX, HEIGHT+20);
+    }
 };
 
 class Asteroid
@@ -135,6 +161,7 @@ public:
     sf::Sprite sprite;
     float speed;
     bool dead = false;
+    bool canDestroy = false;
     float x = x = rand()%WIDTH;
     float y = y = rand()%HEIGHT;
     float length = sqrt(x*x + y*y);
@@ -143,7 +170,14 @@ public:
     {
         sprite.move(x/length * speed, y/length * speed);
     }
-
+    void Init(float Speed, sf::Texture &texture)
+    {
+        speed = Speed;
+        sprite.setOrigin(768/2, 829/2);
+        sprite.setTexture(texture);
+        sprite.setPosition(WIDTH/2, HEIGHT/2);
+        sprite.setScale(0.04f, 0.04f);
+    }
     void ChangeDirection()
     {
         int posX = sprite.getPosition().x;
@@ -154,13 +188,26 @@ public:
 
         length = sqrt(x*x + y*y);
     }
+    void AddToPool()
+    {
+        dead = true;
+        canDestroy = false;
+        sprite.setPosition(WIDTH+10, HEIGHT+10);
+    }
 };
 
+bool CircleCollisionCheck(sf::Sprite a, float Radius_A, sf::Sprite b, float Radius_B)
+{
+    sf::Vector2f posA = a.getPosition();
+    sf::Vector2f posB = b.getPosition();
+    float distance = sqrt((posA.x - posB.x) * (posA.x - posB.x) + (posA.y - posB.y)* (posA.y - posB.y));
+    if(distance <= Radius_A + Radius_B) return true;
+    return false;
+}
 
 int main()
 {
     srand(time(0));
-    sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "", sf::Style::Close);
     window.setFramerateLimit(60);
     window.setMouseCursorVisible(false);
 
@@ -175,60 +222,73 @@ int main()
     crosshair.setScale(0.05f, 0.05f);
     crosshair.setOrigin(512/2, 512/2);
 
+    sf::Font arial;
+    arial.loadFromFile("fonts/arial.ttf");
+
+    sf::Text deadText;
+    deadText.setFont(arial);
+
     Player player;
-    player.Init(soaceshipTexture, 10);
-    player.sprite.setPosition(WIDTH/2, HEIGHT/2);
-    player.sprite.setScale(0.09f, 0.09f);
+    player.Init(soaceshipTexture, 10.f);
+
+    sf::Color defaultPlayerTint = player.sprite.getColor();
+    player.sprite.setColor(sf::Color(120, 120, 120));
 
     std::vector<Laser> laserRays(20);
-    for(int i = 0; i<laserRays.size(); i++){
-        laserRays[i].sprite.setTexture(laserTexture);
-        laserRays[i].sprite.setScale(0.02f, 0.02f);
-        laserRays[i].sprite.setOrigin(100, 300);
-        laserRays[i].sprite.setPosition(WIDTH+10, HEIGHT+10);
-        laserRays[i].speed = 20.f;
-    }
+    for(int i = 0; i<laserRays.size(); i++) {laserRays[i].Init(20.f, laserTexture);}
 
     std::vector<Asteroid> asteroids(15);
-    for(int i = 0; i<asteroids.size(); i++){
-        asteroids[i].speed = 5;
-        asteroids[i].sprite.setOrigin(768/2, 829/2);
-        asteroids[i].sprite.setTexture(asteroidTexture);
-        asteroids[i].sprite.setPosition(WIDTH/2, HEIGHT/2);
-        asteroids[i].sprite.setScale(0.04f, 0.04f);
-    }
+    for(int i = 0; i<asteroids.size(); i++) {asteroids[i].Init(5.f, asteroidTexture);}
 
+    sf::Clock ShieldTime;
 
     while (window.isOpen())
     {
         window.clear(sf::Color::White);
         sf::Event event;
         while (window.pollEvent(event)){
-            if (event.type == sf::Event::Closed)
+            if (event.type == sf::Event::Closed || sf::Keyboard::isKeyPressed(sf::Keyboard::Escape))
                 window.close();
-            if (sf::Mouse::isButtonPressed(sf::Mouse::Left) && event.type == sf::Event::MouseButtonPressed){
+            if (sf::Mouse::isButtonPressed(sf::Mouse::Left) && event.type == sf::Event::MouseButtonPressed && !player.frozen){
                 for(int i = 0; i<laserRays.size(); i++){
                     if(laserRays[i].canBeShot==true){
-                        laserRays[i].SetRotationAndPos(window, player.sprite.getPosition());
+                        laserRays[i].SetRotationAndPos(player.sprite.getPosition());
                         break;
                     }
                 }
             }
+            if(sf::Keyboard::isKeyPressed(sf::Keyboard::R)){
+                 main();
+            }
         }
         crosshair.setPosition((sf::Vector2f)sf::Mouse::getPosition(window));
 
-        player.Rotate(window);
-        player.Move(window, 0.2f);
+        if(ShieldTime.getElapsedTime().asSeconds()>1) player.frozen = false;
 
-        for(int i = 0; i<laserRays.size(); i++){
-            laserRays[i].Move();
-            laserRays[i].CheckPos();
+        if(!player.dead){
+            player.Rotate();
+            player.CheckBoundaries();
+            if(!player.frozen){
+                player.Move(0.2f);
+                player.sprite.setColor(defaultPlayerTint);
+            }
+
+            for(int i = 0; i<laserRays.size(); i++){
+                laserRays[i].Move();
+                laserRays[i].CheckPos();
+            }
         }
+        else{
+            // death screen
+            // explosion anim
+            // hide the space ship
+        }
+
         for(int i = 0; i<asteroids.size(); i++){
             for(int j = 0; j<laserRays.size(); j++){
                 if(asteroids[i].sprite.getGlobalBounds().intersects(laserRays[j].sprite.getGlobalBounds())){
-                    asteroids[i].dead = true;
-                    asteroids[i].sprite.setPosition(WIDTH+10, HEIGHT+10);
+                    asteroids[i].AddToPool();
+                    laserRays[j].AddToPool();
                     break;
                 }
             }
@@ -236,13 +296,15 @@ int main()
                 asteroids[i].Move();
                 asteroids[i].ChangeDirection();
             }
+            if(CircleCollisionCheck(player.sprite, 20, asteroids[i].sprite, 5) && !player.frozen && !player.dead){
+                asteroids[i].AddToPool();
+                player.dead = true;
+            }
         }
 
         for(int i = 0; i<asteroids.size(); i++) window.draw(asteroids[i].sprite);
         for(int i = 0; i<laserRays.size(); i++) window.draw(laserRays[i].sprite);
 
-        //PlayAnim(explosionAnim, false, 0.2f, window);
-        //window.draw(explosionAnim.sprite);
         window.draw(player.sprite);
         window.draw(crosshair);
         window.display();
