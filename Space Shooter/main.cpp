@@ -307,12 +307,12 @@ int main()
     sf::Font arial;
     arial.loadFromFile("fonts/arial.ttf");
 
-    sf::Text deadText;
-    deadText.setFont(arial);
-    deadText.setCharacterSize(44);
-    deadText.setFillColor(sf::Color::Black);
-    deadText.setString("\tGame Over\nPress R to restart");
-    deadText.setPosition(WIDTH/2 - deadText.getLocalBounds().width/2.f, HEIGHT/3 - deadText.getLocalBounds().height/2.f);
+    sf::Text endText;
+    endText.setFont(arial);
+    endText.setCharacterSize(44);
+    endText.setFillColor(sf::Color::Black);
+    endText.setString("\tGame Over\nPress R to restart");
+    endText.setPosition(WIDTH/2 - endText.getLocalBounds().width/2.f, HEIGHT/3 - endText.getLocalBounds().height/2.f);
 
     //Sounds
     sf::SoundBuffer laserBuffer, playerExplosionBuffer, asteroidExplosionBuffer;
@@ -324,6 +324,8 @@ int main()
     laserSound.setBuffer(laserBuffer);
     playerExplosionSound.setBuffer(playerExplosionBuffer);
     asteroidExplosionSound.setBuffer(asteroidExplosionBuffer);
+
+    bool wonGame = false;
 
     while (window.isOpen())
     {
@@ -341,7 +343,7 @@ int main()
                     }
                 }
             }
-            if(sf::Keyboard::isKeyPressed(sf::Keyboard::R) && event.type == sf::Event::KeyPressed){
+            if(sf::Keyboard::isKeyPressed(sf::Keyboard::R) && event.type == sf::Event::KeyPressed && (wonGame || player.dead)){
                  main();
             }
         }
@@ -365,11 +367,14 @@ int main()
         }
         else{
            explosionAnimPlayer.PlayOnce(player.sprite.getPosition(), 0.2f);
-           window.draw(deadText);
+           window.draw(endText);
         }
 
+        wonGame = true;
         //Checking for collision
         for(int i = 0; i<asteroids.size(); i++){
+            if(!asteroids[i].dead) wonGame = false;
+
             for(int j = 0; j<laserRays.size(); j++){
                 if(asteroids[i].sprite.getGlobalBounds().intersects(laserRays[j].sprite.getGlobalBounds()) && !asteroids[i].dead){
                     laserRays[j].AddToPool();
@@ -391,6 +396,11 @@ int main()
                 playerExplosionSound.play();
                 player.dead = true;
             }
+        }
+
+        if(wonGame){
+            endText.setString("\tYou won\nPress R to restart");
+            window.draw(endText);
         }
 
         //Drawing stuff to the window
